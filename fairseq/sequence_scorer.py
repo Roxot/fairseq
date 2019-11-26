@@ -63,19 +63,22 @@ class SequenceScorer(object):
             for bd, tgt, is_single in batched:
                 sample['target'] = tgt
                 curr_prob = model.get_normalized_probs(bd, log_probs=len(models) == 1, sample=sample).data
+
                 if is_single:
+                    output_dists = torch.exp(curr_prob)
                     probs = gather_target_probs(curr_prob, orig_target)
                 else:
                     if probs is None:
                         probs = curr_prob.new(orig_target.numel())
                     step = curr_prob.size(0) * curr_prob.size(1)
                     end = step + idx
+                    output_dists = torch.exp(curr_prob.view(tgt.shape + (curr_prob.size(-1),)))
                     tgt_probs = gather_target_probs(curr_prob.view(tgt.shape + (curr_prob.size(-1),)), tgt)
                     probs[idx:end] = tgt_probs.view(-1)
                     idx = end
                 sample['target'] = orig_target
 
-            probs = probs.view(sample['target'].shape)
+            probs = probs.view(sample['target'].shape) # [B, T, 1] -> [B, T]
 
             if avg_probs is None:
                 avg_probs = probs
@@ -101,6 +104,7 @@ class SequenceScorer(object):
             ref = utils.strip_pad(sample['target'][i, start_idxs[i]:], self.pad) \
                 if sample['target'] is not None else None
             tgt_len = ref.numel()
+            output_dists_i = output_dists[i][start_idxs[i]:start_idxs[i] + tgt_len]
             avg_probs_i = avg_probs[i][start_idxs[i]:start_idxs[i] + tgt_len]
             score_i = avg_probs_i.sum() / tgt_len
             if avg_attn is not None:
@@ -115,5 +119,6 @@ class SequenceScorer(object):
                 'attention': avg_attn_i,
                 'alignment': alignment,
                 'positional_scores': avg_probs_i,
+                'output_distributions': output_dists_i,
             }])
         return hypos

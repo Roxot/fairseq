@@ -10,6 +10,7 @@ Evaluate the perplexity of a trained language model.
 
 import numpy as np
 import torch
+import os
 
 from fairseq import checkpoint_utils, options, progress_bar, tasks, utils
 from fairseq.data import LMContextWindowDataset
@@ -70,7 +71,8 @@ def main(parsed_args):
             setattr(args, arg, getattr(parsed_args, arg))
 
     # reduce tokens per sample by the required context window size
-    args.tokens_per_sample -= args.context_window
+    if args.task != "translation":
+        args.tokens_per_sample -= args.context_window
     task = tasks.setup_task(args)
 
     # Load dataset splits
@@ -153,8 +155,9 @@ def main(parsed_args):
                 tokens = hypo['tokens']
                 tgt_len = tokens.numel()
                 pos_scores = hypo['positional_scores'].float()
+                output_dists = hypo['output_distributions'].float()
 
-                if args.add_bos_token:
+                if args.task != "translation" and args.add_bos_token:
                     assert hypo['tokens'][0].item() == task.target_dictionary.bos()
                     tokens = tokens[1:]
                     pos_scores = pos_scores[1:]
@@ -174,6 +177,12 @@ def main(parsed_args):
                     pos_scores = pos_scores[(~inf_scores).nonzero()]
                 score_sum += pos_scores.sum().cpu()
                 count += pos_scores.numel() - skipped_toks
+
+                if args.output_distributions_folder is not None:
+                    if not os.path.exists(args.output_distributions_folder):
+                        os.mkdir(args.output_distributions_folder)
+                    od_filename = f"output-dist-{sample_id}.npy"
+                    np.save(os.path.join(args.output_distributions_folder, od_filename), output_dists.cpu().numpy())
 
                 if args.output_word_probs or args.output_word_stats:
                     w = ''
@@ -221,7 +230,6 @@ def cli_main():
     parser = options.get_eval_lm_parser()
     args = options.parse_args_and_arch(parser)
     main(args)
-
 
 if __name__ == '__main__':
     cli_main()

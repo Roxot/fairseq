@@ -442,6 +442,8 @@ def add_eval_lm_args(parser):
     group.add_argument('--softmax-batch', default=sys.maxsize, type=int, metavar='N',
                        help='if BxT is more than this, will batch the softmax over vocab to this amount of tokens'
                             ' in order to fit into GPU memory')
+    group.add_argument('--output-distributions-folder', default=None, type=str,
+                       help='If set will store word output distributions to the specified folder.')
     # fmt: on
 
 
